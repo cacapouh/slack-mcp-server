@@ -250,7 +250,7 @@ func (ah *AttachmentsHandler) GetAttachmentDetailsHandler(ctx context.Context, r
 }
 
 // textMimeTypes are MIME types considered as text for content retrieval
-var textMimeTypes = map[string]bool {
+var textMimeTypes = map[string]bool{
 	"text/plain":             true,
 	"text/html":              true,
 	"text/css":               true,
