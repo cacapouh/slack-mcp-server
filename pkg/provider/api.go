@@ -85,6 +85,9 @@ type SlackAPI interface {
 	// Used to get channels list from both Slack and Enterprise Grid versions
 	GetConversationsContext(ctx context.Context, params *slack.GetConversationsParameters) ([]slack.Channel, string, error)
 
+	// Used to get file information
+	GetFileInfoContext(ctx context.Context, fileID string, count, page int) (*slack.File, []slack.Comment, *slack.Paging, error)
+
 	// Edge API methods
 	ClientUserBoot(ctx context.Context) (*edge.ClientUserBootResponse, error)
 }
@@ -284,6 +287,10 @@ func (c *MCPSlackClient) SearchContext(ctx context.Context, query string, params
 
 func (c *MCPSlackClient) PostMessageContext(ctx context.Context, channelID string, options ...slack.MsgOption) (string, string, error) {
 	return c.slackClient.PostMessageContext(ctx, channelID, options...)
+}
+
+func (c *MCPSlackClient) GetFileInfoContext(ctx context.Context, fileID string, count, page int) (*slack.File, []slack.Comment, *slack.Paging, error) {
+	return c.slackClient.GetFileInfoContext(ctx, fileID, count, page)
 }
 
 func (c *MCPSlackClient) ClientUserBoot(ctx context.Context) (*edge.ClientUserBootResponse, error) {

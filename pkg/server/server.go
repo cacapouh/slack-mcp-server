@@ -148,6 +148,34 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger) *MCPServer
 	}
 
 	channelsHandler := handler.NewChannelsHandler(provider, logger)
+	attachmentsHandler := handler.NewAttachmentsHandler(provider, logger)
+
+	s.AddTool(mcp.NewTool("messages_with_attachments",
+		mcp.WithDescription("Search for messages that contain file attachments in a specific channel. Returns a CSV list of attachments with their metadata."),
+		mcp.WithTitleAnnotation("Get Messages with Attachments"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithString("channel_id",
+			mcp.Required(),
+			mcp.Description("ID of the channel in format Cxxxxxxxxxx or its name starting with #... or @... aka #general or @username_dm."),
+		),
+		mcp.WithNumber("limit",
+			mcp.DefaultNumber(100),
+			mcp.Description("The maximum number of messages to scan for attachments. Must be an integer between 1 and 100."),
+		),
+		mcp.WithString("cursor",
+			mcp.Description("Cursor for pagination. Use the value returned from the previous request."),
+		),
+	), attachmentsHandler.MessagesWithAttachmentsHandler)
+
+	s.AddTool(mcp.NewTool("get_attachment_details",
+		mcp.WithDescription("Get detailed information about a specific file attachment including MIME type, size, URLs, thumbnails, and dimensions."),
+		mcp.WithTitleAnnotation("Get Attachment Details"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithString("file_id",
+			mcp.Required(),
+			mcp.Description("The ID of the file attachment to get details for (format: Fxxxxxxxxxx)."),
+		),
+	), attachmentsHandler.GetAttachmentDetailsHandler)
 
 	s.AddTool(mcp.NewTool("channels_list",
 		mcp.WithDescription("Get list of channels"),
