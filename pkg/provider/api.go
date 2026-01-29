@@ -472,6 +472,15 @@ func newWithXOXC(transport string, authProvider auth.ValueAuth, logger *zap.Logg
 }
 
 func (ap *ApiProvider) RefreshUsers(ctx context.Context) error {
+	// Skip if users:read scope is not available
+	if ap.scopeDetector != nil && !ap.scopeDetector.HasScope(ScopeUsersRead) {
+		ap.logger.Info("Skipping users refresh - users:read scope not available",
+			zap.String("context", "console"),
+		)
+		ap.usersReady = true
+		return nil
+	}
+
 	var (
 		list         []slack.User
 		usersCounter = 0
@@ -547,6 +556,15 @@ func (ap *ApiProvider) RefreshUsers(ctx context.Context) error {
 }
 
 func (ap *ApiProvider) RefreshChannels(ctx context.Context) error {
+	// Skip if no channel read scopes are available
+	if ap.scopeDetector != nil && len(ap.scopeDetector.AvailableChannelTypes()) == 0 {
+		ap.logger.Info("Skipping channels refresh - no channel read scopes available",
+			zap.String("context", "console"),
+		)
+		ap.channelsReady = true
+		return nil
+	}
+
 	if data, err := ioutil.ReadFile(ap.channelsCache); err == nil {
 		var cachedChannels []Channel
 		if err := json.Unmarshal(data, &cachedChannels); err != nil {
