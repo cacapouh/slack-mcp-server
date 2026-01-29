@@ -118,6 +118,8 @@ type ApiProvider struct {
 	channelsInv   map[string]string
 	channelsCache string
 	channelsReady bool
+
+	scopeDetector *ScopeDetector
 }
 
 func NewMCPSlackClient(authProvider auth.Provider, logger *zap.Logger) (*MCPSlackClient, error) {
@@ -765,6 +767,37 @@ func (ap *ApiProvider) Slack() SlackAPI {
 func (ap *ApiProvider) IsBotToken() bool {
 	client, ok := ap.client.(*MCPSlackClient)
 	return ok && client != nil && client.IsBotToken()
+}
+
+// ScopeDetector returns the scope detector for this provider
+func (ap *ApiProvider) ScopeDetector() *ScopeDetector {
+	return ap.scopeDetector
+}
+
+// InitScopeDetector initializes the scope detector and detects available scopes
+func (ap *ApiProvider) InitScopeDetector(ctx context.Context) {
+	if ap.client == nil {
+		return
+	}
+	ap.scopeDetector = NewScopeDetector(ap.client, ap.logger)
+	ap.scopeDetector.DetectScopes(ctx)
+}
+
+// HasScope checks if a scope is available (returns true if scope detection is not initialized)
+func (ap *ApiProvider) HasScope(scope Scope) bool {
+	if ap.scopeDetector == nil {
+		// If scope detection is not initialized, assume all scopes are available
+		return true
+	}
+	return ap.scopeDetector.HasScope(scope)
+}
+
+// AvailableChannelTypes returns the channel types that can be accessed based on detected scopes
+func (ap *ApiProvider) AvailableChannelTypes() []string {
+	if ap.scopeDetector == nil {
+		return AllChanTypes
+	}
+	return ap.scopeDetector.AvailableChannelTypes()
 }
 
 func mapChannel(
