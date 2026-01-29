@@ -510,6 +510,14 @@ func (ap *ApiProvider) RefreshUsers(ctx context.Context) error {
 		optionLimit,
 	)
 	if err != nil {
+		// Check if this is a scope-related error
+		if isMissingScopeError(err) {
+			ap.logger.Warn("Failed to fetch users - missing scope (non-fatal)",
+				zap.String("context", "console"),
+				zap.Error(err))
+			ap.usersReady = true
+			return nil
+		}
 		ap.logger.Error("Failed to fetch users", zap.Error(err))
 		return err
 	} else {
@@ -690,7 +698,14 @@ func (ap *ApiProvider) GetChannelsType(ctx context.Context, channelType string) 
 			zap.Int("count", len(channels)),
 		)
 		if err != nil {
-			ap.logger.Error("Failed to fetch channels", zap.Error(err))
+			if isMissingScopeError(err) {
+				ap.logger.Warn("Failed to fetch channels - missing scope",
+					zap.String("channelType", channelType),
+					zap.String("context", "console"),
+					zap.Error(err))
+			} else {
+				ap.logger.Error("Failed to fetch channels", zap.Error(err))
+			}
 			break
 		}
 
