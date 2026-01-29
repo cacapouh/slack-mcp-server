@@ -524,8 +524,10 @@ func (ap *ApiProvider) RefreshUsers(ctx context.Context) error {
 
 	users, err = ap.GetSlackConnect(ctx)
 	if err != nil {
-		ap.logger.Error("Failed to fetch users from Slack Connect", zap.Error(err))
-		return err
+		// Slack Connect may fail due to missing scopes or no shared channels - non-fatal
+		ap.logger.Warn("Failed to fetch users from Slack Connect (non-fatal)",
+			zap.String("context", "console"),
+			zap.Error(err))
 	} else {
 		list = append(list, users...)
 	}
@@ -599,7 +601,13 @@ func (ap *ApiProvider) RefreshChannels(ctx context.Context) error {
 		}
 	}
 
-	channels := ap.GetChannels(ctx, AllChanTypes)
+	// Use only available channel types based on detected scopes
+	channelTypes := AllChanTypes
+	if ap.scopeDetector != nil {
+		channelTypes = ap.scopeDetector.AvailableChannelTypes()
+	}
+
+	channels := ap.GetChannels(ctx, channelTypes)
 
 	if data, err := json.MarshalIndent(channels, "", "  "); err != nil {
 		ap.logger.Error("Failed to marshal channels for cache", zap.Error(err))
