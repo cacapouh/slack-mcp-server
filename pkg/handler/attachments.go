@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 
 	"github.com/gocarina/gocsv"
@@ -245,4 +247,122 @@ func (ah *AttachmentsHandler) GetAttachmentDetailsHandler(ctx context.Context, r
 	}
 
 	return mcp.NewToolResultText(string(jsonBytes)), nil
+}
+
+// textMimeTypes are MIME types considered as text for content retrieval
+var textMimeTypes = map[string]bool {
+	"text/plain":             true,
+	"text/html":              true,
+	"text/css":               true,
+	"text/csv":               true,
+	"text/markdown":          true,
+	"text/xml":               true,
+	"application/json":       true,
+	"application/xml":        true,
+	"application/javascript": true,
+	"application/x-yaml":     true,
+	"application/x-sh":       true,
+}
+
+// isTextFile checks if the file is a text file based on MIME type or file extension
+func isTextFile(mimeType, fileType string) bool {
+	if textMimeTypes[mimeType] {
+		return true
+	}
+	// Check common text file extensions
+	textExtensions := []string{"txt", "md", "json", "xml", "yaml", "yml", "csv", "log", "sh", "py", "go", "js", "ts", "html", "css", "sql"}
+	for _, ext := range textExtensions {
+		if fileType == ext {
+			return true
+		}
+	}
+	return false
+}
+
+// GetAttachmentContentHandler retrieves the content of a text file attachment
+func (ah *AttachmentsHandler) GetAttachmentContentHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	ah.logger.Debug("GetAttachmentContentHandler called", zap.Any("params", request.Params))
+
+	if authenticated, err := auth.IsAuthenticated(ctx, ah.apiProvider.ServerTransport(), ah.logger); !authenticated {
+		ah.logger.Error("Authentication failed", zap.Error(err))
+		return nil, err
+	}
+
+	fileID := request.GetString("file_id", "")
+	if fileID == "" {
+		return nil, errors.New("file_id is required")
+	}
+
+	// Get file info first
+	file, _, _, err := ah.apiProvider.Slack().GetFileInfoContext(ctx, fileID, 1, 1)
+	if err != nil {
+		ah.logger.Error("Failed to get file info", zap.String("file_id", fileID), zap.Error(err))
+		return nil, err
+	}
+
+	// Check if it's a text file
+	if !isTextFile(file.Mimetype, file.Filetype) {
+		return nil, fmt.Errorf("file %q is not a text file (type: %s). Use get_attachment_details for binary files", file.Name, file.Mimetype)
+	}
+
+	// Download the file content
+	content, err := ah.downloadFileContent(ctx, file.URLPrivate)
+	if err != nil {
+		ah.logger.Error("Failed to download file content", zap.String("file_id", fileID), zap.Error(err))
+		return nil, err
+	}
+
+	// Build response with metadata and content
+	response := map[string]interface{}{
+		"id":       file.ID,
+		"name":     file.Name,
+		"title":    file.Title,
+		"mimeType": file.Mimetype,
+		"fileType": file.Filetype,
+		"size":     file.Size,
+		"content":  content,
+	}
+
+	jsonBytes, err := json.MarshalIndent(response, "", "  ")
+	if err != nil {
+		ah.logger.Error("Failed to marshal response to JSON", zap.Error(err))
+		return nil, err
+	}
+
+	return mcp.NewToolResultText(string(jsonBytes)), nil
+}
+
+// downloadFileContent downloads the content of a file from Slack
+func (ah *AttachmentsHandler) downloadFileContent(ctx context.Context, url string) (string, error) {
+	// Get HTTP client from provider
+	httpClient := ah.apiProvider.ProvideHTTPClient()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Add Authorization header for authenticated file download
+	// This is required for bot tokens (xoxb-) and user tokens (xoxp-)
+	token := ah.apiProvider.SlackToken()
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to download file: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to download file: HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file content: %w", err)
+	}
+
+	return string(body), nil
 }

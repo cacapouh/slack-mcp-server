@@ -177,6 +177,16 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger) *MCPServer
 		),
 	), attachmentsHandler.GetAttachmentDetailsHandler)
 
+	s.AddTool(mcp.NewTool("get_attachment_content",
+		mcp.WithDescription("Get the content of a text file attachment. Only works for text files (txt, json, md, yaml, csv, etc.). Returns the file content directly for RAG/AI processing."),
+		mcp.WithTitleAnnotation("Get Attachment Content"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithString("file_id",
+			mcp.Required(),
+			mcp.Description("The ID of the file attachment to get content for (format: Fxxxxxxxxxx)."),
+		),
+	), attachmentsHandler.GetAttachmentContentHandler)
+
 	s.AddTool(mcp.NewTool("channels_list",
 		mcp.WithDescription("Get list of channels"),
 		mcp.WithTitleAnnotation("List Channels"),

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -772,6 +773,24 @@ func (ap *ApiProvider) Slack() SlackAPI {
 func (ap *ApiProvider) IsBotToken() bool {
 	client, ok := ap.client.(*MCPSlackClient)
 	return ok && client != nil && client.IsBotToken()
+}
+
+// ProvideHTTPClient returns the HTTP client used for Slack API requests
+func (ap *ApiProvider) ProvideHTTPClient() *http.Client {
+	client, ok := ap.client.(*MCPSlackClient)
+	if !ok || client == nil || client.authProvider == nil {
+		return http.DefaultClient
+	}
+	return transport.ProvideHTTPClient(client.authProvider.Cookies(), ap.logger)
+}
+
+// SlackToken returns the Slack API token for authenticated requests
+func (ap *ApiProvider) SlackToken() string {
+	client, ok := ap.client.(*MCPSlackClient)
+	if !ok || client == nil || client.authProvider == nil {
+		return ""
+	}
+	return client.authProvider.SlackToken()
 }
 
 func mapChannel(

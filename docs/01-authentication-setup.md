@@ -56,7 +56,8 @@ Instead of using browser-based tokens (`xoxc`/`xoxd`), you can use a User OAuth 
     - `mpim:write` - Start group direct messages with people on a user’s behalf (new since `v1.1.18`)
     - `users:read` - View people in a workspace.
     - `chat:write` - Send messages on a user’s behalf. (new since `v1.1.18`)
-    - `search:read` - Search a workspace’s content. (new since `v1.1.18`)
+    - `search:read` - Search a workspace's content. (new since `v1.1.18`)
+    - `files:read` - View files shared in channels and conversations.
 
 3. Install the app to your workspace
 4. Copy the "User OAuth Token" (starts with `xoxp-`)
@@ -84,7 +85,8 @@ To create the app from a manifest with permissions preconfigured, use the follow
                 "mpim:write",
                 "users:read",
                 "chat:write",
-                "search:read"
+                "search:read",
+                "files:read"
             ]
         }
     },
