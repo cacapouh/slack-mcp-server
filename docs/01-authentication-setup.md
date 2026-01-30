@@ -2,10 +2,10 @@
 
 > **Maintainer note**
 >
-> I’m currently seeking a new **full-time or contract engineering role** after losing my primary job.  
+> I'm currently seeking a new **full-time or contract engineering role** after losing my primary job.  
 > This directly impacts my ability to maintain this project long-term.
 >
-> If you know a **Hiring Manager, Engineering Manager, or startup team** that might be a good fit, I’d be grateful for an introduction.
+> If you know a **Hiring Manager, Engineering Manager, or startup team** that might be a good fit, I'd be grateful for an introduction.
 >
 > 👉 See the full context in **[this issue](https://github.com/korotovsky/slack-mcp-server/issues/150)**  
 > 📩 Contact: `dmitry@korotovsky.io`
@@ -43,26 +43,48 @@ Token value is printed right after the executed command (it starts with
 Instead of using browser-based tokens (`xoxc`/`xoxd`), you can use a User OAuth token:
 
 1. Go to [api.slack.com/apps](https://api.slack.com/apps) and create a new app
-2. Under "OAuth & Permissions", add the following scopes:
-    - `channels:history` - View messages in public channels
-    - `channels:read` - View basic information about public channels
-    - `groups:history` - View messages in private channels
-    - `groups:read` - View basic information about private channels
-    - `im:history` - View messages in direct messages.
-    - `im:read` - View basic information about direct messages
-    - `im:write` - Start direct messages with people on a user’s behalf (new since `v1.1.18`)
-    - `mpim:history` - View messages in group direct messages
-    - `mpim:read` - View basic information about group direct messages
-    - `mpim:write` - Start group direct messages with people on a user’s behalf (new since `v1.1.18`)
-    - `users:read` - View people in a workspace.
-    - `chat:write` - Send messages on a user’s behalf. (new since `v1.1.18`)
-    - `search:read` - Search a workspace’s content. (new since `v1.1.18`)
+2. Under "OAuth & Permissions", add the scopes you need. **The server will automatically detect available scopes at startup and enable only the features your token supports.**
+
+##### Available Scopes
+
+| Scope | Required For | Description |
+|-------|--------------|-------------|
+| `channels:read` | `channels_list` (public) | View basic information about public channels |
+| `channels:history` | `conversations_history` (public) | View messages in public channels |
+| `groups:read` | `channels_list` (private) | View basic information about private channels |
+| `groups:history` | `conversations_history` (private) | View messages in private channels |
+| `im:read` | `channels_list` (DMs) | View basic information about direct messages |
+| `im:history` | `conversations_history` (DMs) | View messages in direct messages |
+| `im:write` | Opening new DMs | Start direct messages with people on a user's behalf |
+| `mpim:read` | `channels_list` (Group DMs) | View basic information about group direct messages |
+| `mpim:history` | `conversations_history` (Group DMs) | View messages in group direct messages |
+| `mpim:write` | Opening new Group DMs | Start group direct messages with people on a user's behalf |
+| `users:read` | `users` resource | View people in a workspace |
+| `chat:write` | `conversations_add_message` | Send messages on a user's behalf |
+| `search:read` | `conversations_search_messages` | Search a workspace's content |
+
+##### Minimal Scope Examples
+
+**Read-only access to public channels only:**
+```
+channels:read, channels:history
+```
+
+**Read-only access to all channel types:**
+```
+channels:read, channels:history, groups:read, groups:history, im:read, im:history, mpim:read, mpim:history
+```
+
+**Full access (all features):**
+```
+channels:read, channels:history, groups:read, groups:history, im:read, im:history, im:write, mpim:read, mpim:history, mpim:write, users:read, chat:write, search:read
+```
 
 3. Install the app to your workspace
 4. Copy the "User OAuth Token" (starts with `xoxp-`)
 
-##### App manifest (preconfigured scopes)
-To create the app from a manifest with permissions preconfigured, use the following code snippet:
+##### App manifest (preconfigured scopes - full access)
+To create the app from a manifest with all permissions preconfigured, use the following code snippet:
 
 ```json
 {
@@ -85,6 +107,30 @@ To create the app from a manifest with permissions preconfigured, use the follow
                 "users:read",
                 "chat:write",
                 "search:read"
+            ]
+        }
+    },
+    "settings": {
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false
+    }
+}
+```
+
+##### App manifest (minimal - public channels read-only)
+For minimal read-only access to public channels only:
+
+```json
+{
+    "display_information": {
+        "name": "Slack MCP (Read-only)"
+    },
+    "oauth_config": {
+        "scopes": {
+            "user": [
+                "channels:history",
+                "channels:read"
             ]
         }
     },

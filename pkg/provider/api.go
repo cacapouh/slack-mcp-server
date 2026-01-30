@@ -125,6 +125,8 @@ type ApiProvider struct {
 	channelsInv   map[string]string
 	channelsCache string
 	channelsReady bool
+
+	scopeDetector *ScopeDetector
 }
 
 func NewMCPSlackClient(authProvider auth.Provider, logger *zap.Logger) (*MCPSlackClient, error) {
@@ -493,6 +495,15 @@ func newWithXOXC(transport string, authProvider auth.ValueAuth, logger *zap.Logg
 }
 
 func (ap *ApiProvider) RefreshUsers(ctx context.Context) error {
+	// Skip if users:read scope is not available
+	if ap.scopeDetector != nil && !ap.scopeDetector.HasScope(ScopeUsersRead) {
+		ap.logger.Info("Skipping users refresh - users:read scope not available",
+			zap.String("context", "console"),
+		)
+		ap.usersReady = true
+		return nil
+	}
+
 	var (
 		list         []slack.User
 		usersCounter = 0
@@ -522,6 +533,14 @@ func (ap *ApiProvider) RefreshUsers(ctx context.Context) error {
 		optionLimit,
 	)
 	if err != nil {
+		// Check if this is a scope-related error
+		if isMissingScopeError(err) {
+			ap.logger.Warn("Failed to fetch users - missing scope (non-fatal)",
+				zap.String("context", "console"),
+				zap.Error(err))
+			ap.usersReady = true
+			return nil
+		}
 		ap.logger.Error("Failed to fetch users", zap.Error(err))
 		return err
 	} else {
@@ -536,8 +555,10 @@ func (ap *ApiProvider) RefreshUsers(ctx context.Context) error {
 
 	users, err = ap.GetSlackConnect(ctx)
 	if err != nil {
-		ap.logger.Error("Failed to fetch users from Slack Connect", zap.Error(err))
-		return err
+		// Slack Connect may fail due to missing scopes or no shared channels - non-fatal
+		ap.logger.Warn("Failed to fetch users from Slack Connect (non-fatal)",
+			zap.String("context", "console"),
+			zap.Error(err))
 	} else {
 		list = append(list, users...)
 	}
@@ -568,6 +589,15 @@ func (ap *ApiProvider) RefreshUsers(ctx context.Context) error {
 }
 
 func (ap *ApiProvider) RefreshChannels(ctx context.Context) error {
+	// Skip if no channel read scopes are available
+	if ap.scopeDetector != nil && len(ap.scopeDetector.AvailableChannelTypes()) == 0 {
+		ap.logger.Info("Skipping channels refresh - no channel read scopes available",
+			zap.String("context", "console"),
+		)
+		ap.channelsReady = true
+		return nil
+	}
+
 	if data, err := ioutil.ReadFile(ap.channelsCache); err == nil {
 		var cachedChannels []Channel
 		if err := json.Unmarshal(data, &cachedChannels); err != nil {
@@ -602,7 +632,13 @@ func (ap *ApiProvider) RefreshChannels(ctx context.Context) error {
 		}
 	}
 
-	channels := ap.GetChannels(ctx, AllChanTypes)
+	// Use only available channel types based on detected scopes
+	channelTypes := AllChanTypes
+	if ap.scopeDetector != nil {
+		channelTypes = ap.scopeDetector.AvailableChannelTypes()
+	}
+
+	channels := ap.GetChannels(ctx, channelTypes)
 
 	if data, err := json.MarshalIndent(channels, "", "  "); err != nil {
 		ap.logger.Error("Failed to marshal channels for cache", zap.Error(err))
@@ -685,7 +721,14 @@ func (ap *ApiProvider) GetChannelsType(ctx context.Context, channelType string) 
 			zap.Int("count", len(channels)),
 		)
 		if err != nil {
-			ap.logger.Error("Failed to fetch channels", zap.Error(err))
+			if isMissingScopeError(err) {
+				ap.logger.Warn("Failed to fetch channels - missing scope",
+					zap.String("channelType", channelType),
+					zap.String("context", "console"),
+					zap.Error(err))
+			} else {
+				ap.logger.Error("Failed to fetch channels", zap.Error(err))
+			}
 			break
 		}
 
@@ -788,6 +831,37 @@ func (ap *ApiProvider) Slack() SlackAPI {
 func (ap *ApiProvider) IsBotToken() bool {
 	client, ok := ap.client.(*MCPSlackClient)
 	return ok && client != nil && client.IsBotToken()
+}
+
+// ScopeDetector returns the scope detector for this provider
+func (ap *ApiProvider) ScopeDetector() *ScopeDetector {
+	return ap.scopeDetector
+}
+
+// InitScopeDetector initializes the scope detector and detects available scopes
+func (ap *ApiProvider) InitScopeDetector(ctx context.Context) {
+	if ap.client == nil {
+		return
+	}
+	ap.scopeDetector = NewScopeDetector(ap.client, ap.logger)
+	ap.scopeDetector.DetectScopes(ctx)
+}
+
+// HasScope checks if a scope is available (returns true if scope detection is not initialized)
+func (ap *ApiProvider) HasScope(scope Scope) bool {
+	if ap.scopeDetector == nil {
+		// If scope detection is not initialized, assume all scopes are available
+		return true
+	}
+	return ap.scopeDetector.HasScope(scope)
+}
+
+// AvailableChannelTypes returns the channel types that can be accessed based on detected scopes
+func (ap *ApiProvider) AvailableChannelTypes() []string {
+	if ap.scopeDetector == nil {
+		return AllChanTypes
+	}
+	return ap.scopeDetector.AvailableChannelTypes()
 }
 
 func mapChannel(
